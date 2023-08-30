@@ -5,6 +5,18 @@ provider "aws" {
 }
 
 
+#If the value was not informed, terraform will prompt to enter it on CLI
+# To pass its value -> terraform apply -var "pb-subnet-prefix=10.0.0.0/24"
+# Its value is auto read from terraform.tfvars
+# A custom file can be used <name>.tfvars
+# To use it run terraform apply -var-file <name>.tfvars
+
+variable "pb-subnet-prefix" {
+  description = "SUBNET PUBLIC CDIR BLOCK"
+  #default = "10.0.0.0/24" #used when not informed
+  #type = String #optional
+}
+
 resource "aws_vpc" "app-vpc" {
   cidr_block = "10.0.0.0/16"
   tags = {
@@ -12,9 +24,25 @@ resource "aws_vpc" "app-vpc" {
   }
 }
 
+resource "aws_internet_gateway" "app-igw" {
+  vpc_id = aws_vpc.app-vpc.id
+
+  tags = {
+    Name = "app-igw"
+  }
+}
+
+resource "aws_egress_only_internet_gateway" "egress-igw" {
+  vpc_id = aws_vpc.app-vpc.id
+
+  tags = {
+    Name = "eggress-only-igw"
+  }
+}
+
 resource "aws_subnet" "public-subnet-a" {
   vpc_id                  = aws_vpc.app-vpc.id
-  cidr_block              = "10.0.0.0/24"
+  cidr_block              = var.pb-subnet-prefix
   availability_zone       = "us-east-1a"
   map_public_ip_on_launch = true
   tags = {
@@ -39,22 +67,6 @@ resource "aws_subnet" "private-subnet-a" {
 resource "aws_route_table_association" "pv_a-to-pv_route" {
   subnet_id      = aws_subnet.private-subnet-a.id
   route_table_id = aws_route_table.private-route.id
-}
-
-resource "aws_internet_gateway" "app-igw" {
-  vpc_id = aws_vpc.app-vpc.id
-
-  tags = {
-    Name = "app-igw"
-  }
-}
-
-resource "aws_egress_only_internet_gateway" "egress-igw" {
-  vpc_id = aws_vpc.app-vpc.id
-
-  tags = {
-    Name = "eggress-only-igw"
-  }
 }
 
 resource "aws_route_table" "public-route" {
@@ -84,7 +96,7 @@ resource "aws_route_table" "private-route" {
 
 resource "aws_security_group" "web-sg" {
   name        = "web-sg"
-  description = "Allow public trafic"
+  description = "Allow public traffic"
   vpc_id      = aws_vpc.app-vpc.id
 
   ingress {
@@ -164,3 +176,7 @@ resource "aws_instance" "web-app" {
     Name = "web-app"
   }
 } 
+
+output "web-server-ip" {
+  value = aws_instance.web-app.public_ip
+}
